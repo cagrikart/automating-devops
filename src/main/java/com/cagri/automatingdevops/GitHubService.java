@@ -52,33 +52,33 @@ public class GitHubService {
         }
     }
 
-    public void createTag(String tagName, String commitSha, String branchName) {
-        // Branch bazlı kontrol
-        if (!"uat".equalsIgnoreCase(branchName)) {
-            System.out.println("Tag creation is allowed only for the UAT branch.");
-            return;
-        }
+    public void createReleaseWithTargetBranch(String tagName, String releaseName, String releaseBody, String targetBranch) {
+        // GitHub Release API Endpoint
+        String releaseUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/releases";
 
-        String environmentSpecificTag = branchName.toLowerCase() + "-" + tagName;
-
-        String url = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/git/refs";
+        // HTTP Headers
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
 
-        // Tag oluşturma için body
-        Map<String, String> body = new HashMap<>();
-        body.put("ref", "refs/tags/" + environmentSpecificTag);
-        body.put("sha", commitSha);
+        // Request Body
+        Map<String, Object> releaseBodyMap = new HashMap<>();
+        releaseBodyMap.put("tag_name", tagName); // Yeni tag
+        releaseBodyMap.put("name", releaseName); // Release adı
+        releaseBodyMap.put("body", releaseBody); // Release açıklamaları
+        releaseBodyMap.put("target_commitish", targetBranch); // Target branch (ör. sit)
+        releaseBodyMap.put("draft", false); // Taslak olarak mı kaydedilsin
+        releaseBodyMap.put("prerelease", false); // Ön sürüm mü
 
-        HttpEntity<Map<String, String>> entity = new HttpEntity<>(body, headers);
+        HttpEntity<Map<String, Object>> releaseEntity = new HttpEntity<>(releaseBodyMap, headers);
 
-        ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+        // API Çağrısı
+        ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
 
-        if (response.getStatusCode().is2xxSuccessful()) {
-            System.out.println("Tag created successfully for branch: " + branchName);
+        if (releaseResponse.getStatusCode().is2xxSuccessful()) {
+            System.out.println("Release created successfully for target branch: " + targetBranch);
         } else {
-            System.out.println("Failed to create tag: " + response.getBody());
+            System.out.println("Failed to create release: " + releaseResponse.getBody());
         }
     }
 
