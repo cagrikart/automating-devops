@@ -60,7 +60,6 @@ public class GitHubService {
         headers.set("Accept", "application/vnd.github+json");
 
         Map<String, Object> releaseBodyMap = new HashMap<>();
-        releaseBodyMap.put("tag_name", tagName);
         releaseBodyMap.put("name", releaseName);
         releaseBodyMap.put("body", releaseBody);
         releaseBodyMap.put("target_commitish", targetBranch);
