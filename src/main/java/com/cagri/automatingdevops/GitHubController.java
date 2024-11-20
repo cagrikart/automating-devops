@@ -33,7 +33,8 @@ public class GitHubController {
         try {
             String tagName = body.get("tagName");
             String commitSha = body.get("commitSha");
-            gitHubService.createTag(tagName, commitSha);
+            String branchName = body.get("branchName");
+            gitHubService.createTag(tagName, commitSha,branchName);
             return ResponseEntity.ok("Tag created successfully.");
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to create tag.");
