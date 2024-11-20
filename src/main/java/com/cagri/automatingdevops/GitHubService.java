@@ -53,26 +53,20 @@ public class GitHubService {
     }
 
     public void createReleaseWithTargetBranch(String tagName, String releaseName, String releaseBody, String targetBranch) {
-        // GitHub Release API Endpoint
         String releaseUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/releases";
 
-        // HTTP Headers
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
 
-        // Request Body
         Map<String, Object> releaseBodyMap = new HashMap<>();
-        releaseBodyMap.put("tag_name", tagName); // Yeni tag
-        releaseBodyMap.put("name", releaseName); // Release adı
-        releaseBodyMap.put("body", releaseBody); // Release açıklamaları
-        releaseBodyMap.put("target_commitish", targetBranch); // Target branch (ör. sit)
-        releaseBodyMap.put("draft", false); // Taslak olarak mı kaydedilsin
-        releaseBodyMap.put("prerelease", false); // Ön sürüm mü
+        releaseBodyMap.put("tag_name", tagName);
+        releaseBodyMap.put("name", releaseName);
+        releaseBodyMap.put("body", releaseBody);
+        releaseBodyMap.put("target_commitish", targetBranch);
 
         HttpEntity<Map<String, Object>> releaseEntity = new HttpEntity<>(releaseBodyMap, headers);
 
-        // API Çağrısı
         ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
 
         if (releaseResponse.getStatusCode().is2xxSuccessful()) {
