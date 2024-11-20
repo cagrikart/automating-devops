@@ -52,7 +52,7 @@ public class GitHubService {
         }
     }
 
-    public void createReleaseWithTargetBranch(String tagName, String releaseName, String releaseBody, String targetBranch) {
+    public void createReleaseWithTargetBranch( String releaseName, String releaseBody, String targetBranch) {
         String releaseUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/releases";
 
         HttpHeaders headers = new HttpHeaders();
