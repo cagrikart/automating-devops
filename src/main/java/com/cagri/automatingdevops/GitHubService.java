@@ -35,7 +35,7 @@ public class GitHubService {
         this.restTemplate = restTemplateBuilder.build();
     }
 
-    public void mergePullRequest(int pullNumber) {
+    public void mergePullRequest(String gitHubRepo,String pullNumber) {
         String url = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/pulls/" + pullNumber + "/merge";
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + gitHubToken);
@@ -52,7 +52,7 @@ public class GitHubService {
         }
     }
 
-    public void createReleaseWithTargetBranch( String releaseName, String releaseBody, String targetBranch) {
+    public void createReleaseWithTargetBranch(String releaseName, String releaseBody, String targetBranch) {
         String releaseUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/releases";
 
         HttpHeaders headers = new HttpHeaders();

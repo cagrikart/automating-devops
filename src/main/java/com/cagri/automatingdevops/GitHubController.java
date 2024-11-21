@@ -19,9 +19,11 @@ public class GitHubController {
     }
 
     @PostMapping("/merge/{pullNumber}")
-    public ResponseEntity<String> mergePR(@PathVariable int pullNumber) {
+    public ResponseEntity<String> mergePR(@RequestBody Map<String, String> body) {
         try {
-            gitHubService.mergePullRequest(pullNumber);
+            String githubRepo = body.get("githubRepo");
+            String pullNumber = body.get("pullNumber");
+            gitHubService.mergePullRequest(githubRepo,pullNumber);
             return ResponseEntity.ok("PR merged successfully.");
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to merge PR.");
