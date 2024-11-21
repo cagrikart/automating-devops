@@ -35,8 +35,8 @@ public class GitHubService {
         this.restTemplate = restTemplateBuilder.build();
     }
 
-    public void mergePullRequest(int pullNumber) {
-        String url = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/pulls/" + pullNumber + "/merge";
+    public void mergePullRequest(String githubRepo,int pullNumber) {
+        String url = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + githubRepo + "/pulls/" + pullNumber + "/merge";
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
