@@ -61,19 +61,36 @@ public class GitHubService {
 
         HttpEntity<Void> listEntity = new HttpEntity<>(headers);
 
-        // Mevcut taglerin kontrolü
         ResponseEntity<String> tagListResponse = restTemplate.exchange(tagListUrl, HttpMethod.GET, listEntity, String.class);
         if (tagListResponse.getStatusCode().is2xxSuccessful()) {
-            // Gelen yanıtı parse ederek mevcut tagleri kontrol et
             ObjectMapper objectMapper = new ObjectMapper();
             try {
                 JsonNode tagList = objectMapper.readTree(tagListResponse.getBody());
+                int highestVersion = 0;
+
                 for (JsonNode tag : tagList) {
                     String existingTagName = tag.get("name").asText();
-                    if (existingTagName.equals(tagName)) {
-                        throw new IllegalArgumentException("Tag with name '" + tagName + "' already exists.");
+                    // Tag formatına uygunluk kontrolü
+                    if (existingTagName.endsWith("-" + targetBranch)) {
+                        String[] parts = existingTagName.split("-");
+                        if (parts.length >= 3) {
+                            String versionPart = parts[0];
+                            if (versionPart.matches("\\d+\\.\\d+\\.\\d+")) {
+                                String[] versionNumbers = versionPart.split("\\.");
+                                int major = Integer.parseInt(versionNumbers[0]);
+                                int minor = Integer.parseInt(versionNumbers[1]);
+                                int patch = Integer.parseInt(versionNumbers[2]);
+
+                                highestVersion = Math.max(highestVersion, patch);
+                            }
+                        }
                     }
                 }
+
+                // Yeni tag oluştur
+                int newPatchVersion = highestVersion + 1;
+                tagName = "1.0." + newPatchVersion + "-c10-" + targetBranch;
+
             } catch (JsonProcessingException e) {
                 throw new RuntimeException("Failed to parse tag list response: " + e.getMessage());
             }
@@ -81,7 +98,6 @@ public class GitHubService {
             throw new RuntimeException("Failed to retrieve tags: " + tagListResponse.getBody());
         }
 
-        // Yeni tag oluşturma ve release işlemleri
         String tagUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/git/refs";
 
         Map<String, String> tagBody = new HashMap<>();
