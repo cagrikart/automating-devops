@@ -37,53 +37,58 @@ public class GitHubService {
     }
 
     public void mergePullRequest(String githubRepo, int pullNumber) {
-        String pullUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + githubRepo + "/pulls/" + pullNumber;
-        String mergeUrl = pullUrl + "/merge";
+        String url = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + githubRepo + "/pulls/" + pullNumber;
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
 
-        ResponseEntity<String> prResponse = restTemplate.exchange(pullUrl, HttpMethod.GET, new HttpEntity<>(headers), String.class);
+        HttpEntity<String> entity = new HttpEntity<>(headers);
 
-        if (!prResponse.getStatusCode().is2xxSuccessful() || !prResponse.getBody().contains("\"state\":\"open\"")) {
-            System.out.println("PR is not approved or not open: " + prResponse.getBody());
-            return;
-        }
+        // PR onaylanmış mı kontrol et
+        ResponseEntity<String> pullResponse = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+        if (pullResponse.getStatusCode().is2xxSuccessful()) {
+            String responseBody = pullResponse.getBody();
+            if (responseBody != null && responseBody.contains("\"state\":\"approved\"")) {
+                String mergeUrl = url + "/merge";
+                ResponseEntity<String> mergeResponse = restTemplate.exchange(mergeUrl, HttpMethod.PUT, entity, String.class);
 
-        HttpEntity<String> mergeEntity = new HttpEntity<>(headers);
-        ResponseEntity<String> mergeResponse = restTemplate.exchange(mergeUrl, HttpMethod.PUT, mergeEntity, String.class);
-
-        if (mergeResponse.getStatusCode().is2xxSuccessful()) {
-            System.out.println("PR merged successfully.");
+                if (mergeResponse.getStatusCode().is2xxSuccessful()) {
+                    System.out.println("PR merged successfully.");
+                } else {
+                    System.out.println("Failed to merge PR: " + mergeResponse.getBody());
+                }
+            } else {
+                System.out.println("PR is not approved. Merge operation cannot proceed.");
+            }
         } else {
-            System.out.println("Failed to merge PR: " + mergeResponse.getBody());
+            System.out.println("Failed to fetch PR details: " + pullResponse.getBody());
         }
     }
 
     public void createTagAndRelease(String tagName, String commitSha, String targetBranch, String releaseNotes) {
+        // Eğer tagName verilmemişse otomatik oluştur
+        if (tagName == null || tagName.isEmpty()) {
+            tagName = generateNextTag();
+        }
+
         String tagUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/git/refs";
-        String releaseUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/releases";
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
 
-        ResponseEntity<String> tagsResponse = restTemplate.exchange(tagUrl, HttpMethod.GET, new HttpEntity<>(headers), String.class);
-
-        if (tagsResponse.getStatusCode().is2xxSuccessful() && Objects.requireNonNull(tagsResponse.getBody()).contains("\"refs/tags/" + tagName + "\"")) {
-            throw new RuntimeException("Tag already exists: " + tagName);
+        // Mevcut tag var mı kontrol et
+        ResponseEntity<String> existingTagsResponse = restTemplate.exchange(tagUrl, HttpMethod.GET, new HttpEntity<>(headers), String.class);
+        if (existingTagsResponse.getStatusCode().is2xxSuccessful()) {
+            String tagsResponseBody = existingTagsResponse.getBody();
+            if (tagsResponseBody != null && tagsResponseBody.contains("\"ref\":\"refs/tags/" + tagName + "\"")) {
+                throw new IllegalStateException("Tag with name " + tagName + " already exists.");
+            }
         }
 
-
-        if (tagName == null || tagName.isEmpty()) {
-            tagName = getNextMinorVersion(Objects.requireNonNull(tagsResponse.getBody()));
-        }
-
+        // Tag oluştur
         Map<String, String> tagBody = new HashMap<>();
         tagBody.put("ref", "refs/tags/" + tagName);
         tagBody.put("sha", commitSha);
 
         HttpEntity<Map<String, String>> tagEntity = new HttpEntity<>(tagBody, headers);
-
         ResponseEntity<String> tagResponse = restTemplate.exchange(tagUrl, HttpMethod.POST, tagEntity, String.class);
 
         if (tagResponse.getStatusCode().is2xxSuccessful()) {
@@ -93,6 +98,9 @@ public class GitHubService {
             return;
         }
 
+        // Release oluştur
+        String releaseUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/releases";
+
         Map<String, Object> releaseBody = new HashMap<>();
         releaseBody.put("tag_name", tagName);
         releaseBody.put("target_commitish", targetBranch);
@@ -100,7 +108,6 @@ public class GitHubService {
         releaseBody.put("body", releaseNotes);
 
         HttpEntity<Map<String, Object>> releaseEntity = new HttpEntity<>(releaseBody, headers);
-
         ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
 
         if (releaseResponse.getStatusCode().is2xxSuccessful()) {
@@ -110,41 +117,36 @@ public class GitHubService {
         }
     }
 
-    private String getNextMinorVersion(String tagsResponse) {
-        String latestTag = "1.0.1-c10-sit";
+    private String generateNextTag() {
+        String tagUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/tags";
+        ResponseEntity<String> tagsResponse = restTemplate.exchange(tagUrl, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), String.class);
 
-        String[] tags = tagsResponse.split("\n");
-        for (String tag : tags) {
-            if (tag.contains("refs/tags/")) {
-                String version = tag.substring(tag.lastIndexOf("/") + 1).replace("\"", "");
-                if (version.matches("v\\d+\\.\\d+\\.\\d+")) {
-                    if (compareVersions(version, latestTag) > 0) {
-                        latestTag = version;
-                    }
-                }
+        if (tagsResponse.getStatusCode().is2xxSuccessful()) {
+            String tagsBody = tagsResponse.getBody();
+            if (tagsBody != null) {
+                // En büyük tag'i bul ve bir artır
+                String latestTag = findLatestTag(tagsBody);
+                return incrementMinorVersion(latestTag);
             }
         }
 
-        String[] versionParts = latestTag.substring(1).split("\\.");
-        int major = Integer.parseInt(versionParts[0]);
-        int minor = Integer.parseInt(versionParts[1]) + 1;
-        int patch = 0;
-
-        return "v" + major + "." + minor + "." + patch;
+        // Default olarak ilk tag
+        return "v1.0.0";
     }
 
-    private int compareVersions(String v1, String v2) {
-        String[] parts1 = v1.substring(1).split("\\.");
-        String[] parts2 = v2.substring(1).split("\\.");
-        for (int i = 0; i < parts1.length; i++) {
-            int part1 = Integer.parseInt(parts1[i]);
-            int part2 = Integer.parseInt(parts2[i]);
-            if (part1 != part2) {
-                return part1 - part2;
-            }
+    private String findLatestTag(String tagsBody) {
+        // Örnek bir tag çıkarıcı (detaylı işleme gerekebilir)
+        return "v1.0.0"; // Gerçek tag'i döndürecek şekilde geliştirilmeli
+    }
+
+    private String incrementMinorVersion(String tag) {
+        String[] parts = tag.replace("v", "").split("\\.");
+        if (parts.length >= 2) {
+            int major = Integer.parseInt(parts[0]);
+            int minor = Integer.parseInt(parts[1]) + 1;
+            return "v" + major + "." + minor + ".0";
         }
-        return 0;
+        return "v1.0.0"; // Eğer parsing başarısız olursa
     }
-
 
 }
