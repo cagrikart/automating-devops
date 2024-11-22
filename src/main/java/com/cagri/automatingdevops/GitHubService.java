@@ -1,12 +1,12 @@
 package com.cagri.automatingdevops;
 
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -53,11 +53,36 @@ public class GitHubService {
         }
     }
 
-    public void createTagAndRelease(String tagName, String commitSha, String targetBranch,  String releaseNotes) {
-        String tagUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/git/refs";
+    public void createTagAndRelease(String tagName, String commitSha, String targetBranch, String releaseNotes) {
+        String tagListUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/tags";
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
+
+        HttpEntity<Void> listEntity = new HttpEntity<>(headers);
+
+        // Mevcut taglerin kontrolü
+        ResponseEntity<String> tagListResponse = restTemplate.exchange(tagListUrl, HttpMethod.GET, listEntity, String.class);
+        if (tagListResponse.getStatusCode().is2xxSuccessful()) {
+            // Gelen yanıtı parse ederek mevcut tagleri kontrol et
+            ObjectMapper objectMapper = new ObjectMapper();
+            try {
+                JsonNode tagList = objectMapper.readTree(tagListResponse.getBody());
+                for (JsonNode tag : tagList) {
+                    String existingTagName = tag.get("name").asText();
+                    if (existingTagName.equals(tagName)) {
+                        throw new IllegalArgumentException("Tag with name '" + tagName + "' already exists.");
+                    }
+                }
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("Failed to parse tag list response: " + e.getMessage());
+            }
+        } else {
+            throw new RuntimeException("Failed to retrieve tags: " + tagListResponse.getBody());
+        }
+
+        // Yeni tag oluşturma ve release işlemleri
+        String tagUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/git/refs";
 
         Map<String, String> tagBody = new HashMap<>();
         tagBody.put("ref", "refs/tags/" + tagName);
@@ -66,7 +91,6 @@ public class GitHubService {
         HttpEntity<Map<String, String>> tagEntity = new HttpEntity<>(tagBody, headers);
 
         ResponseEntity<String> tagResponse = restTemplate.exchange(tagUrl, HttpMethod.POST, tagEntity, String.class);
-
         if (tagResponse.getStatusCode().is2xxSuccessful()) {
             System.out.println("Tag created successfully: " + tagName);
         } else {
@@ -82,7 +106,6 @@ public class GitHubService {
         releaseBody.put("name", tagName);
         releaseBody.put("body", releaseNotes);
 
-
         HttpEntity<Map<String, Object>> releaseEntity = new HttpEntity<>(releaseBody, headers);
 
         ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
@@ -93,6 +116,7 @@ public class GitHubService {
             System.out.println("Failed to create release: " + releaseResponse.getBody());
         }
     }
+
 
 
 
