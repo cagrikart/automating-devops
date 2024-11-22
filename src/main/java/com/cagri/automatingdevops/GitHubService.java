@@ -111,7 +111,7 @@ public class GitHubService {
     }
 
     private String getNextMinorVersion(String tagsResponse) {
-        String latestTag = "v0.0.0";
+        String latestTag = "1.0.1-c10-sit";
 
         String[] tags = tagsResponse.split("\n");
         for (String tag : tags) {

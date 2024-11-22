@@ -18,7 +18,7 @@ public class GitHubController {
         this.gitHubService = gitHubService;
     }
 
-    @PostMapping("/merge/{pullNumber}")
+    @PostMapping("/merge/{githubRepo}/{pullNumber}")
     public ResponseEntity<String> mergePR(@PathVariable String githubRepo,@PathVariable int pullNumber) {
         try {
             gitHubService.mergePullRequest(githubRepo,pullNumber);
