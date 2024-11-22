@@ -43,7 +43,6 @@ public class GitHubService {
 
         HttpEntity<String> entity = new HttpEntity<>(headers);
 
-        // PR onaylanmış mı kontrol et
         ResponseEntity<String> pullResponse = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
         if (pullResponse.getStatusCode().is2xxSuccessful()) {
             String responseBody = pullResponse.getBody();
