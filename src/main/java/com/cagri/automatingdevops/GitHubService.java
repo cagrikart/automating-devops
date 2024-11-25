@@ -53,7 +53,7 @@ public class GitHubService {
         }
     }
 
-    public String createTagAndRelease(String targetBranch) {
+    public ReleaseResponse createTagAndRelease(String targetBranch) throws JsonProcessingException {
         String tagName;
         String branchUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/branches/" + targetBranch;
         HttpHeaders headers = new HttpHeaders();
@@ -174,17 +174,20 @@ public class GitHubService {
 
         ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
 
-        if (releaseResponse.getStatusCode().is2xxSuccessful()) {
+
             ObjectMapper objectMapper = new ObjectMapper();
-            try {
                 JsonNode releaseInfo = objectMapper.readTree(releaseResponse.getBody());
-                return releaseInfo.get("html_url").asText(); // Release linkini döndür
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException("Failed to parse release response: " + e.getMessage());
-            }
-        } else {
-            throw new RuntimeException("Failed to create release: " + releaseResponse.getBody());
-        }
+                String releaseLink = releaseInfo.get("html_url").asText();
+
+                // Response nesnesi oluştur
+                ReleaseResponse response = new ReleaseResponse();
+                response.setTargetBranch(targetBranch);
+                response.setTagName(tagName);
+                response.setReleaseName(tagName);
+                response.setReleaseTagUrl(releaseLink);
+                response.setReleaseNotes(releaseNotes);
+
+                return response; // ReleaseResponse döndür
     }
 
 }
