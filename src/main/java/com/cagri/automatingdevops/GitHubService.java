@@ -158,7 +158,6 @@ public class GitHubService {
             return;
         }
 
-        // Release oluşturma
         String releaseUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/releases";
 
         Map<String, Object> releaseBody = new HashMap<>();
