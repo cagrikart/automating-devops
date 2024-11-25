@@ -29,14 +29,15 @@ public class GitHubController {
     }
 
     @PostMapping("/createTagAndRelease")
-    public ResponseEntity<String> createTagAndRelease(@RequestBody Map<String, String> body) {
+    public ResponseEntity<ReleaseResponse> createTagAndRelease(@RequestBody Map<String, String> body) {
         try {
             String targetBranch = body.get("targetBranch");
-            gitHubService.createTagAndRelease( targetBranch) ;
-            return ResponseEntity.ok("Tag created successfully.");
+            ReleaseResponse response = gitHubService.createTagAndRelease(targetBranch);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to create tag.");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
         }
     }
+
 
 }
