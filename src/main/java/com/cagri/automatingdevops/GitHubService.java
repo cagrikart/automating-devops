@@ -116,7 +116,11 @@ public class GitHubService {
             throw new RuntimeException("Failed to retrieve tags: " + tagListResponse.getBody());
         }
 
-        // İki SHA arasındaki commit'leri al
+        // Sadece son tag ile yeni tag arasındaki farkları al
+        if (latestTagSha == null) {
+            throw new RuntimeException("No previous tag found for branch: " + targetBranch);
+        }
+
         String compareUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/compare/" + latestTagSha + "..." + commitSha;
         ResponseEntity<String> compareResponse = restTemplate.exchange(compareUrl, HttpMethod.GET, listEntity, String.class);
         String releaseNotes = "";
@@ -125,7 +129,7 @@ public class GitHubService {
             try {
                 JsonNode compareInfo = objectMapper.readTree(compareResponse.getBody());
                 JsonNode commits = compareInfo.get("commits");
-                StringBuilder notesBuilder = new StringBuilder();
+                StringBuilder notesBuilder = new StringBuilder("Changes between " + latestTagSha + " and " + commitSha + ":\n");
                 for (JsonNode commit : commits) {
                     notesBuilder.append("- ").append(commit.get("commit").get("message").asText()).append("\n");
                 }
