@@ -175,19 +175,20 @@ public class GitHubService {
         ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
 
 
-            ObjectMapper objectMapper = new ObjectMapper();
-                JsonNode releaseInfo = objectMapper.readTree(releaseResponse.getBody());
-                String releaseLink = releaseInfo.get("html_url").asText();
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode releaseInfo = objectMapper.readTree(releaseResponse.getBody());
+        String releaseLink = releaseInfo.get("html_url").asText();
+        String developerFullName = releaseInfo.get("author").get("login").asText();
 
-                // Response nesnesi oluştur
-                ReleaseResponse response = new ReleaseResponse();
-                response.setTargetBranch(targetBranch);
-                response.setTagName(tagName);
-                response.setReleaseName(tagName);
-                response.setReleaseTagUrl(releaseLink);
-                response.setReleaseNotes(releaseNotes);
+        ReleaseResponse response = new ReleaseResponse();
+        response.setTargetBranch(targetBranch);
+        response.setTagName(tagName);
+        response.setReleaseName(tagName);
+        response.setReleaseTagUrl(releaseLink);
+        response.setReleaseNotes(releaseNotes);
+        response.setDeveloperFullName(developerFullName);
 
-                return response; // ReleaseResponse döndür
+        return response; // ReleaseResponse döndür
     }
 
 }
