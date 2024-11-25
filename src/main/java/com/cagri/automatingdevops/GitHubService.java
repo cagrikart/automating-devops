@@ -53,15 +53,35 @@ public class GitHubService {
         }
     }
 
-    public void createTagAndRelease(String tagName, String commitSha, String targetBranch, String releaseNotes) {
-        String tagListUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/tags";
+    public void createTagAndRelease(String targetBranch) {
+        String tagName;
+        String branchUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/branches/" + targetBranch;
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
 
         HttpEntity<Void> listEntity = new HttpEntity<>(headers);
 
+        // Branch'in son commit SHA'sını al
+        String commitSha;
+        ResponseEntity<String> branchResponse = restTemplate.exchange(branchUrl, HttpMethod.GET, listEntity, String.class);
+        if (branchResponse.getStatusCode().is2xxSuccessful()) {
+            ObjectMapper objectMapper = new ObjectMapper();
+            try {
+                JsonNode branchInfo = objectMapper.readTree(branchResponse.getBody());
+                commitSha = branchInfo.get("commit").get("sha").asText();
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("Failed to parse branch info: " + e.getMessage());
+            }
+        } else {
+            throw new RuntimeException("Failed to retrieve branch info: " + branchResponse.getBody());
+        }
+
+        // Mevcut taglerin kontrolü ve yeni tag'in oluşturulması
+        String tagListUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/tags";
+
         ResponseEntity<String> tagListResponse = restTemplate.exchange(tagListUrl, HttpMethod.GET, listEntity, String.class);
+        String latestTagSha = null; // En son tag'in SHA'sı
         if (tagListResponse.getStatusCode().is2xxSuccessful()) {
             ObjectMapper objectMapper = new ObjectMapper();
             try {
@@ -70,24 +90,22 @@ public class GitHubService {
 
                 for (JsonNode tag : tagList) {
                     String existingTagName = tag.get("name").asText();
-                    // Tag formatına uygunluk kontrolü
                     if (existingTagName.endsWith("-" + targetBranch)) {
                         String[] parts = existingTagName.split("-");
                         if (parts.length >= 3) {
                             String versionPart = parts[0];
                             if (versionPart.matches("\\d+\\.\\d+\\.\\d+")) {
                                 String[] versionNumbers = versionPart.split("\\.");
-                                int major = Integer.parseInt(versionNumbers[0]);
-                                int minor = Integer.parseInt(versionNumbers[1]);
                                 int patch = Integer.parseInt(versionNumbers[2]);
-
                                 highestVersion = Math.max(highestVersion, patch);
+
+                                // SHA bilgisini al
+                                latestTagSha = tag.get("commit").get("sha").asText();
                             }
                         }
                     }
                 }
 
-                // Yeni tag oluştur
                 int newPatchVersion = highestVersion + 1;
                 tagName = "1.0." + newPatchVersion + "-c10-" + targetBranch;
 
@@ -98,6 +116,32 @@ public class GitHubService {
             throw new RuntimeException("Failed to retrieve tags: " + tagListResponse.getBody());
         }
 
+        // Sadece son tag ile yeni tag arasındaki farkları al
+        if (latestTagSha == null) {
+            throw new RuntimeException("No previous tag found for branch: " + targetBranch);
+        }
+
+        String compareUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/compare/" + latestTagSha + "..." + commitSha;
+        ResponseEntity<String> compareResponse = restTemplate.exchange(compareUrl, HttpMethod.GET, listEntity, String.class);
+        String releaseNotes = "";
+        if (compareResponse.getStatusCode().is2xxSuccessful()) {
+            ObjectMapper objectMapper = new ObjectMapper();
+            try {
+                JsonNode compareInfo = objectMapper.readTree(compareResponse.getBody());
+                JsonNode commits = compareInfo.get("commits");
+                StringBuilder notesBuilder = new StringBuilder("Changes between " + latestTagSha + " and " + commitSha + ":\n");
+                for (JsonNode commit : commits) {
+                    notesBuilder.append("- ").append(commit.get("commit").get("message").asText()).append("\n");
+                }
+                releaseNotes = notesBuilder.toString();
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("Failed to parse compare info: " + e.getMessage());
+            }
+        } else {
+            throw new RuntimeException("Failed to compare commits: " + compareResponse.getBody());
+        }
+
+        // Yeni tag oluşturma
         String tagUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/git/refs";
 
         Map<String, String> tagBody = new HashMap<>();
@@ -114,6 +158,7 @@ public class GitHubService {
             return;
         }
 
+        // Release oluşturma
         String releaseUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/releases";
 
         Map<String, Object> releaseBody = new HashMap<>();
@@ -132,9 +177,5 @@ public class GitHubService {
             System.out.println("Failed to create release: " + releaseResponse.getBody());
         }
     }
-
-
-
-
 
 }
