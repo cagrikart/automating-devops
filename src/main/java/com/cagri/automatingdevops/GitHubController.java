@@ -31,11 +31,9 @@ public class GitHubController {
     @PostMapping("/createTagAndRelease")
     public ResponseEntity<String> createTagAndRelease(@RequestBody Map<String, String> body) {
         try {
-            String tagName = body.get("tagName");
-            String commitSha = body.get("commitSha");
             String targetBranch = body.get("targetBranch");
             String releaseNotes = body.get("releaseNotes");
-            gitHubService.createTagAndRelease( tagName,  commitSha,  targetBranch,   releaseNotes) ;
+            gitHubService.createTagAndRelease( targetBranch,   releaseNotes) ;
             return ResponseEntity.ok("Tag created successfully.");
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to create tag.");
