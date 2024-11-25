@@ -32,8 +32,7 @@ public class GitHubController {
     public ResponseEntity<String> createTagAndRelease(@RequestBody Map<String, String> body) {
         try {
             String targetBranch = body.get("targetBranch");
-            String releaseNotes = body.get("releaseNotes");
-            gitHubService.createTagAndRelease( targetBranch,   releaseNotes) ;
+            gitHubService.createTagAndRelease( targetBranch) ;
             return ResponseEntity.ok("Tag created successfully.");
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to create tag.");
