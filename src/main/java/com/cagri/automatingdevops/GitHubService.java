@@ -187,7 +187,7 @@ public class GitHubService {
         response.setDeveloperFullName(developerFullName);
         response.setGitHubRepo(gitHubRepo);
 
-        return response; // ReleaseResponse döndür
+        return response;
     }
 
 }
