@@ -12,5 +12,6 @@ public class ReleaseResponse {
     private String releaseTagUrl;
     private String releaseNotes;
     private String developerFullName;
+    private String gitHubRepo;
 
 }

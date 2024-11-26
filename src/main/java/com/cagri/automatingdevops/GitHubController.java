@@ -32,7 +32,8 @@ public class GitHubController {
     public ResponseEntity<ReleaseResponse> createTagAndRelease(@RequestBody Map<String, String> body) {
         try {
             String targetBranch = body.get("targetBranch");
-            ReleaseResponse response = gitHubService.createTagAndRelease(targetBranch);
+            String gitHubRepo = body.get("gitHubRepo");
+            ReleaseResponse response = gitHubService.createTagAndRelease(targetBranch,gitHubRepo);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
