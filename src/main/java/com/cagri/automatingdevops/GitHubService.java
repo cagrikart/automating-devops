@@ -53,7 +53,7 @@ public class GitHubService {
         }
     }
 
-    public void createTagAndRelease(String targetBranch) {
+    public ReleaseResponse createTagAndRelease(String targetBranch,String gitHubRepo) throws JsonProcessingException {
         String tagName;
         String branchUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/branches/" + targetBranch;
         HttpHeaders headers = new HttpHeaders();
@@ -62,7 +62,6 @@ public class GitHubService {
 
         HttpEntity<Void> listEntity = new HttpEntity<>(headers);
 
-        // Branch'in son commit SHA'sını al
         String commitSha;
         ResponseEntity<String> branchResponse = restTemplate.exchange(branchUrl, HttpMethod.GET, listEntity, String.class);
         if (branchResponse.getStatusCode().is2xxSuccessful()) {
@@ -77,16 +76,16 @@ public class GitHubService {
             throw new RuntimeException("Failed to retrieve branch info: " + branchResponse.getBody());
         }
 
-        // Mevcut taglerin kontrolü ve yeni tag'in oluşturulması
         String tagListUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/tags";
 
         ResponseEntity<String> tagListResponse = restTemplate.exchange(tagListUrl, HttpMethod.GET, listEntity, String.class);
         String latestTagSha = null; // En son tag'in SHA'sı
+        String latestTagName = null; // En son tag'in adı
         if (tagListResponse.getStatusCode().is2xxSuccessful()) {
             ObjectMapper objectMapper = new ObjectMapper();
             try {
                 JsonNode tagList = objectMapper.readTree(tagListResponse.getBody());
-                int highestVersion = 0;
+                int highestPatchVersion = -1;
 
                 for (JsonNode tag : tagList) {
                     String existingTagName = tag.get("name").asText();
@@ -97,16 +96,21 @@ public class GitHubService {
                             if (versionPart.matches("\\d+\\.\\d+\\.\\d+")) {
                                 String[] versionNumbers = versionPart.split("\\.");
                                 int patch = Integer.parseInt(versionNumbers[2]);
-                                highestVersion = Math.max(highestVersion, patch);
-
-                                // SHA bilgisini al
-                                latestTagSha = tag.get("commit").get("sha").asText();
+                                if (patch > highestPatchVersion) {
+                                    highestPatchVersion = patch;
+                                    latestTagSha = tag.get("commit").get("sha").asText();
+                                    latestTagName = existingTagName;
+                                }
                             }
                         }
                     }
                 }
 
-                int newPatchVersion = highestVersion + 1;
+                if (highestPatchVersion == -1) {
+                    throw new RuntimeException("No valid tag found for branch: " + targetBranch);
+                }
+
+                int newPatchVersion = highestPatchVersion + 1;
                 tagName = "1.0." + newPatchVersion + "-c10-" + targetBranch;
 
             } catch (JsonProcessingException e) {
@@ -116,7 +120,7 @@ public class GitHubService {
             throw new RuntimeException("Failed to retrieve tags: " + tagListResponse.getBody());
         }
 
-        // Sadece son tag ile yeni tag arasındaki farkları al
+        // Sadece en son tag ile yeni tag arasındaki farkları al
         if (latestTagSha == null) {
             throw new RuntimeException("No previous tag found for branch: " + targetBranch);
         }
@@ -129,7 +133,7 @@ public class GitHubService {
             try {
                 JsonNode compareInfo = objectMapper.readTree(compareResponse.getBody());
                 JsonNode commits = compareInfo.get("commits");
-                StringBuilder notesBuilder = new StringBuilder("Changes between " + latestTagSha + " and " + commitSha + ":\n");
+                StringBuilder notesBuilder = new StringBuilder("Changes between " + latestTagName + " and " + tagName + ":\n");
                 for (JsonNode commit : commits) {
                     notesBuilder.append("- ").append(commit.get("commit").get("message").asText()).append("\n");
                 }
@@ -151,11 +155,8 @@ public class GitHubService {
         HttpEntity<Map<String, String>> tagEntity = new HttpEntity<>(tagBody, headers);
 
         ResponseEntity<String> tagResponse = restTemplate.exchange(tagUrl, HttpMethod.POST, tagEntity, String.class);
-        if (tagResponse.getStatusCode().is2xxSuccessful()) {
-            System.out.println("Tag created successfully: " + tagName);
-        } else {
-            System.out.println("Failed to create tag: " + tagResponse.getBody());
-            return;
+        if (!tagResponse.getStatusCode().is2xxSuccessful()) {
+            throw new RuntimeException("Failed to create tag: " + tagResponse.getBody());
         }
 
         // Release oluşturma
@@ -171,11 +172,22 @@ public class GitHubService {
 
         ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
 
-        if (releaseResponse.getStatusCode().is2xxSuccessful()) {
-            System.out.println("Release created successfully: " + tagName);
-        } else {
-            System.out.println("Failed to create release: " + releaseResponse.getBody());
-        }
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode releaseInfo = objectMapper.readTree(releaseResponse.getBody());
+        String releaseLink = releaseInfo.get("html_url").asText();
+        String developerFullName = releaseInfo.get("author").get("login").asText();
+
+        ReleaseResponse response = new ReleaseResponse();
+        response.setTargetBranch(targetBranch);
+        response.setTagName(tagName);
+        response.setReleaseName(tagName);
+        response.setReleaseTagUrl(releaseLink);
+        response.setReleaseNotes(releaseNotes);
+        response.setDeveloperFullName(developerFullName);
+        response.setGitHubRepo(gitHubRepo);
+
+        return response; // ReleaseResponse döndür
     }
 
 }
