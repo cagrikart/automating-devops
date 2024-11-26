@@ -53,7 +53,7 @@ public class GitHubService {
         }
     }
 
-    public ReleaseResponse createTagAndRelease(String targetBranch) throws JsonProcessingException {
+    public ReleaseResponse createTagAndRelease(String targetBranch,String gitHubRepo) throws JsonProcessingException {
         String tagName;
         String branchUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/branches/" + targetBranch;
         HttpHeaders headers = new HttpHeaders();
@@ -62,7 +62,6 @@ public class GitHubService {
 
         HttpEntity<Void> listEntity = new HttpEntity<>(headers);
 
-        // Branch'in son commit SHA'sını al
         String commitSha;
         ResponseEntity<String> branchResponse = restTemplate.exchange(branchUrl, HttpMethod.GET, listEntity, String.class);
         if (branchResponse.getStatusCode().is2xxSuccessful()) {
@@ -77,7 +76,6 @@ public class GitHubService {
             throw new RuntimeException("Failed to retrieve branch info: " + branchResponse.getBody());
         }
 
-        // Mevcut taglerin kontrolü ve en son tag'i bulma
         String tagListUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/tags";
 
         ResponseEntity<String> tagListResponse = restTemplate.exchange(tagListUrl, HttpMethod.GET, listEntity, String.class);
@@ -175,19 +173,21 @@ public class GitHubService {
         ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
 
 
-            ObjectMapper objectMapper = new ObjectMapper();
-                JsonNode releaseInfo = objectMapper.readTree(releaseResponse.getBody());
-                String releaseLink = releaseInfo.get("html_url").asText();
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode releaseInfo = objectMapper.readTree(releaseResponse.getBody());
+        String releaseLink = releaseInfo.get("html_url").asText();
+        String developerFullName = releaseInfo.get("author").get("login").asText();
 
-                // Response nesnesi oluştur
-                ReleaseResponse response = new ReleaseResponse();
-                response.setTargetBranch(targetBranch);
-                response.setTagName(tagName);
-                response.setReleaseName(tagName);
-                response.setReleaseTagUrl(releaseLink);
-                response.setReleaseNotes(releaseNotes);
+        ReleaseResponse response = new ReleaseResponse();
+        response.setTargetBranch(targetBranch);
+        response.setTagName(tagName);
+        response.setReleaseName(tagName);
+        response.setReleaseTagUrl(releaseLink);
+        response.setReleaseNotes(releaseNotes);
+        response.setDeveloperFullName(developerFullName);
+        response.setGitHubRepo(gitHubRepo);
 
-                return response; // ReleaseResponse döndür
+        return response; // ReleaseResponse döndür
     }
 
 }
