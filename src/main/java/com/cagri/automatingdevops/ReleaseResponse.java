@@ -13,5 +13,6 @@ public class ReleaseResponse {
     private String releaseNotes;
     private String developerFullName;
     private String gitHubRepo;
+    private String date;
 
 }

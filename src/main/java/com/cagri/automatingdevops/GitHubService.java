@@ -10,6 +10,8 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -53,8 +55,7 @@ public class GitHubService {
         }
     }
 
-    public ReleaseResponse createTagAndRelease(String targetBranch,String gitHubRepo) throws JsonProcessingException {
-        String tagName;
+    public ReleaseResponse createTagAndRelease(String targetBranch,String gitHubRepo) throws JsonProcessingException {String tagName;
         String branchUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/branches/" + targetBranch;
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + gitHubToken);
@@ -62,6 +63,7 @@ public class GitHubService {
 
         HttpEntity<Void> listEntity = new HttpEntity<>(headers);
 
+        // Branch bilgisi alma
         String commitSha;
         ResponseEntity<String> branchResponse = restTemplate.exchange(branchUrl, HttpMethod.GET, listEntity, String.class);
         if (branchResponse.getStatusCode().is2xxSuccessful()) {
@@ -76,11 +78,12 @@ public class GitHubService {
             throw new RuntimeException("Failed to retrieve branch info: " + branchResponse.getBody());
         }
 
+        // Tag bilgisi alma
         String tagListUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/tags";
-
         ResponseEntity<String> tagListResponse = restTemplate.exchange(tagListUrl, HttpMethod.GET, listEntity, String.class);
-        String latestTagSha = null; // En son tag'in SHA'sı
-        String latestTagName = null; // En son tag'in adı
+        String latestTagSha = null;
+        String latestTagName = null;
+
         if (tagListResponse.getStatusCode().is2xxSuccessful()) {
             ObjectMapper objectMapper = new ObjectMapper();
             try {
@@ -107,11 +110,11 @@ public class GitHubService {
                 }
 
                 if (highestPatchVersion == -1) {
-                    throw new RuntimeException("No valid tag found for branch: " + targetBranch);
+                    tagName = "1.0.0-c10-" + targetBranch;
+                } else {
+                    int newPatchVersion = highestPatchVersion + 1;
+                    tagName = "1.0." + newPatchVersion + "-c10-" + targetBranch;
                 }
-
-                int newPatchVersion = highestPatchVersion + 1;
-                tagName = "1.0." + newPatchVersion + "-c10-" + targetBranch;
 
             } catch (JsonProcessingException e) {
                 throw new RuntimeException("Failed to parse tag list response: " + e.getMessage());
@@ -120,59 +123,63 @@ public class GitHubService {
             throw new RuntimeException("Failed to retrieve tags: " + tagListResponse.getBody());
         }
 
-        // Sadece en son tag ile yeni tag arasındaki farkları al
-        if (latestTagSha == null) {
-            throw new RuntimeException("No previous tag found for branch: " + targetBranch);
-        }
-
-        String compareUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/compare/" + latestTagSha + "..." + commitSha;
-        ResponseEntity<String> compareResponse = restTemplate.exchange(compareUrl, HttpMethod.GET, listEntity, String.class);
+        // Farklılıkları bul ve release notları oluştur
         String releaseNotes = "";
-        if (compareResponse.getStatusCode().is2xxSuccessful()) {
-            ObjectMapper objectMapper = new ObjectMapper();
-            try {
-                JsonNode compareInfo = objectMapper.readTree(compareResponse.getBody());
-                JsonNode commits = compareInfo.get("commits");
-                StringBuilder notesBuilder = new StringBuilder("Changes between " + latestTagName + " and " + tagName + ":\n");
-                for (JsonNode commit : commits) {
-                    notesBuilder.append("- ").append(commit.get("commit").get("message").asText()).append("\n");
-                }
-                releaseNotes = notesBuilder.toString();
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException("Failed to parse compare info: " + e.getMessage());
-            }
+        if (latestTagSha == null) {
+            // İlk tag yoksa, compare işlemi atlanır ve başlangıç notu eklenir
+            releaseNotes = "Initial release for branch: " + targetBranch;
         } else {
-            throw new RuntimeException("Failed to compare commits: " + compareResponse.getBody());
+            // Compare işlemi yalnızca önceki bir tag mevcutsa yapılır
+            String compareUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/compare/" + latestTagSha + "..." + commitSha;
+            ResponseEntity<String> compareResponse = restTemplate.exchange(compareUrl, HttpMethod.GET, listEntity, String.class);
+            if (compareResponse.getStatusCode().is2xxSuccessful()) {
+                ObjectMapper objectMapper = new ObjectMapper();
+                try {
+                    JsonNode compareInfo = objectMapper.readTree(compareResponse.getBody());
+                    JsonNode commits = compareInfo.get("commits");
+                    StringBuilder notesBuilder = new StringBuilder("Changes between " + latestTagName + " and " + tagName + ":\n");
+                    for (JsonNode commit : commits) {
+                        notesBuilder.append("- ").append(commit.get("commit").get("message").asText()).append("\n");
+                    }
+                    releaseNotes = notesBuilder.toString();
+                } catch (JsonProcessingException e) {
+                    throw new RuntimeException("Failed to parse compare info: " + e.getMessage());
+                }
+            } else {
+                throw new RuntimeException("Failed to compare commits: " + compareResponse.getBody());
+            }
         }
 
         // Yeni tag oluşturma
         String tagUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/git/refs";
-
         Map<String, String> tagBody = new HashMap<>();
         tagBody.put("ref", "refs/tags/" + tagName);
         tagBody.put("sha", commitSha);
 
         HttpEntity<Map<String, String>> tagEntity = new HttpEntity<>(tagBody, headers);
-
         ResponseEntity<String> tagResponse = restTemplate.exchange(tagUrl, HttpMethod.POST, tagEntity, String.class);
         if (!tagResponse.getStatusCode().is2xxSuccessful()) {
             throw new RuntimeException("Failed to create tag: " + tagResponse.getBody());
         }
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        String timeStamp = LocalDateTime.now().format(formatter);
 
-        // Release oluşturma
+        // Yeni release oluşturma
         String releaseUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/releases";
-
         Map<String, Object> releaseBody = new HashMap<>();
         releaseBody.put("tag_name", tagName);
         releaseBody.put("target_commitish", targetBranch);
         releaseBody.put("name", tagName);
         releaseBody.put("body", releaseNotes);
 
+
         HttpEntity<Map<String, Object>> releaseEntity = new HttpEntity<>(releaseBody, headers);
-
         ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
+        if (!releaseResponse.getStatusCode().is2xxSuccessful()) {
+            throw new RuntimeException("Failed to create release: " + releaseResponse.getBody());
+        }
 
-
+        // Release bilgilerini döndür
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode releaseInfo = objectMapper.readTree(releaseResponse.getBody());
         String releaseLink = releaseInfo.get("html_url").asText();
@@ -186,8 +193,10 @@ public class GitHubService {
         response.setReleaseNotes(releaseNotes);
         response.setDeveloperFullName(developerFullName);
         response.setGitHubRepo(gitHubRepo);
+        response.setDate(timeStamp);
 
         return response;
+
     }
 
 }
