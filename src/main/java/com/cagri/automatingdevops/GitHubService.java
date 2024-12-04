@@ -139,12 +139,16 @@ public class GitHubService {
                 ObjectMapper objectMapper = new ObjectMapper();
                 try {
                     JsonNode compareInfo = objectMapper.readTree(compareResponse.getBody());
-                    JsonNode commits = compareInfo.get("commits");
-                    StringBuilder notesBuilder = new StringBuilder("Changes between " + latestTagName + " and " + tagName + ":\n");
-                    for (JsonNode commit : commits) {
-                        notesBuilder.append("- ").append(commit.get("commit").get("message").asText()).append("\n");
+                    if (compareInfo.has("commits")) {
+                        JsonNode commits = compareInfo.get("commits");
+                        StringBuilder notesBuilder = new StringBuilder("Changes between " + latestTagName + " and " + tagName + ":\n");
+                        for (JsonNode commit : commits) {
+                            notesBuilder.append("- ").append(commit.get("commit").get("message").asText()).append("\n");
+                        }
+                        releaseNotes = notesBuilder.toString();
+                    } else {
+                        releaseNotes = "No commits found between tags.";
                     }
-                    releaseNotes = notesBuilder.toString();
                 } catch (JsonProcessingException e) {
                     throw new RuntimeException("Failed to parse compare info: " + e.getMessage());
                 }
@@ -153,7 +157,6 @@ public class GitHubService {
             }
         }
 
-        // Yeni tag oluşturma
         String tagUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/git/refs";
         Map<String, String> tagBody = new HashMap<>();
         tagBody.put("ref", "refs/tags/" + tagName);
