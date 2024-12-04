@@ -173,6 +173,7 @@ public class GitHubService {
         releaseBody.put("body", releaseNotes);
 
 
+
         HttpEntity<Map<String, Object>> releaseEntity = new HttpEntity<>(releaseBody, headers);
         ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
         if (!releaseResponse.getStatusCode().is2xxSuccessful()) {
