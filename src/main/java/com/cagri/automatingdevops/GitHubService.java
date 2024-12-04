@@ -12,7 +12,9 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 
@@ -28,8 +30,6 @@ public class GitHubService {
     @Value("${github.owner}")
     private String gitHubOwner;
 
-    @Value("${github.repo}")
-    private String gitHubRepo;
 
     private final RestTemplate restTemplate;
     private final ReleaseResponseRepository releaseResponseRepository;
@@ -56,7 +56,20 @@ public class GitHubService {
             System.out.println("Failed to merge PR: " + response.getBody());
         }
     }
+    public List<ReleaseResponse> createTagsAndReleases(String targetBranch, List<String> gitHubRepos, String customVersion, String crId, String defectId) throws Exception {
+        List<ReleaseResponse> releaseResponses = new ArrayList<>();
 
+        for (String gitHubRepo : gitHubRepos) {
+            try {
+                ReleaseResponse response = createTagAndRelease(targetBranch, gitHubRepo, customVersion, crId, defectId);
+                releaseResponses.add(response);
+            } catch (Exception e) {
+                System.err.println("Error processing repo " + gitHubRepo + ": " + e.getMessage());
+            }
+        }
+
+        return releaseResponses;
+    }
     public ReleaseResponse createTagAndRelease(String targetBranch, String gitHubRepo, String customVersion, String  crId, String defectId) throws JsonProcessingException {
         String tagName;
         HttpHeaders headers = new HttpHeaders();
@@ -72,7 +85,7 @@ public class GitHubService {
         ResponseEntity<String> gitLogin = restTemplate.exchange(url, HttpMethod.GET, requestEntity, String.class);
 
         JsonNode jsonNode = objectMapper.readTree(gitLogin.getBody());
-        String developerFullName = jsonNode.get("login").asText();
+        String gitHubOwner = jsonNode.get("login").asText();
         String branchUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/branches/" + targetBranch;
         headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
@@ -203,7 +216,7 @@ public class GitHubService {
         response.setReleaseName(tagName);
         response.setReleaseTagUrl(releaseLink);
         response.setReleaseNotes(releaseNotes);
-        response.setDeveloperFullName(developerFullName);
+        response.setDeveloperFullName(gitHubOwner);
         response.setGitHubRepo(gitHubRepo);
         response.setDate(timeStamp);
         response.setCrId(crId);
