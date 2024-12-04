@@ -14,7 +14,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 
 
 @Service
@@ -33,9 +32,12 @@ public class GitHubService {
     private String gitHubRepo;
 
     private final RestTemplate restTemplate;
+    private final ReleaseResponseRepository releaseResponseRepository;
 
-    public GitHubService(RestTemplateBuilder restTemplateBuilder) {
+
+    public GitHubService(RestTemplateBuilder restTemplateBuilder,ReleaseResponseRepository   releaseResponseRepository) {
         this.restTemplate = restTemplateBuilder.build();
+        this.releaseResponseRepository = releaseResponseRepository;
     }
 
     public void mergePullRequest(String githubRepo,int pullNumber) {
@@ -55,9 +57,23 @@ public class GitHubService {
         }
     }
 
-    public ReleaseResponse createTagAndRelease(String targetBranch,String gitHubRepo) throws JsonProcessingException {String tagName;
-        String branchUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/branches/" + targetBranch;
+    public ReleaseResponse createTagAndRelease(String targetBranch, String gitHubRepo, String customVersion, String  crId, String defectId) throws JsonProcessingException {
+        String tagName;
         HttpHeaders headers = new HttpHeaders();
+        String url = "https://api.github.com/user";
+
+        headers.set("Authorization", "Bearer " + gitHubToken);
+        headers.set("Accept", "application/vnd.github+json");
+
+        HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
+        RestTemplate restTemplate = new RestTemplate();
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        ResponseEntity<String> gitLogin = restTemplate.exchange(url, HttpMethod.GET, requestEntity, String.class);
+
+        JsonNode jsonNode = objectMapper.readTree(gitLogin.getBody());
+        String developerFullName = jsonNode.get("login").asText();
+        String branchUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/branches/" + targetBranch;
         headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
 
@@ -67,7 +83,7 @@ public class GitHubService {
         String commitSha;
         ResponseEntity<String> branchResponse = restTemplate.exchange(branchUrl, HttpMethod.GET, listEntity, String.class);
         if (branchResponse.getStatusCode().is2xxSuccessful()) {
-            ObjectMapper objectMapper = new ObjectMapper();
+             objectMapper = new ObjectMapper();
             try {
                 JsonNode branchInfo = objectMapper.readTree(branchResponse.getBody());
                 commitSha = branchInfo.get("commit").get("sha").asText();
@@ -85,7 +101,6 @@ public class GitHubService {
         String latestTagName = null;
 
         if (tagListResponse.getStatusCode().is2xxSuccessful()) {
-            ObjectMapper objectMapper = new ObjectMapper();
             try {
                 JsonNode tagList = objectMapper.readTree(tagListResponse.getBody());
                 int highestPatchVersion = -1;
@@ -110,10 +125,10 @@ public class GitHubService {
                 }
 
                 if (highestPatchVersion == -1) {
-                    tagName = "1.0.0-c10-" + targetBranch;
+                    tagName = "1.0.0-" + customVersion + "-" + targetBranch;
                 } else {
                     int newPatchVersion = highestPatchVersion + 1;
-                    tagName = "1.0." + newPatchVersion + "-c10-" + targetBranch;
+                    tagName = "1.0." + newPatchVersion + "-" + customVersion + "-" + targetBranch;
                 }
 
             } catch (JsonProcessingException e) {
@@ -126,22 +141,23 @@ public class GitHubService {
         // Farklılıkları bul ve release notları oluştur
         String releaseNotes = "";
         if (latestTagSha == null) {
-            // İlk tag yoksa, compare işlemi atlanır ve başlangıç notu eklenir
             releaseNotes = "Initial release for branch: " + targetBranch;
         } else {
-            // Compare işlemi yalnızca önceki bir tag mevcutsa yapılır
             String compareUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/compare/" + latestTagSha + "..." + commitSha;
             ResponseEntity<String> compareResponse = restTemplate.exchange(compareUrl, HttpMethod.GET, listEntity, String.class);
             if (compareResponse.getStatusCode().is2xxSuccessful()) {
-                ObjectMapper objectMapper = new ObjectMapper();
                 try {
                     JsonNode compareInfo = objectMapper.readTree(compareResponse.getBody());
-                    JsonNode commits = compareInfo.get("commits");
-                    StringBuilder notesBuilder = new StringBuilder("Changes between " + latestTagName + " and " + tagName + ":\n");
-                    for (JsonNode commit : commits) {
-                        notesBuilder.append("- ").append(commit.get("commit").get("message").asText()).append("\n");
+                    if (compareInfo.has("commits")) {
+                        JsonNode commits = compareInfo.get("commits");
+                        StringBuilder notesBuilder = new StringBuilder("Changes between " + latestTagName + " and " + tagName + ":\n");
+                        for (JsonNode commit : commits) {
+                            notesBuilder.append("- ").append(commit.get("commit").get("message").asText()).append("\n");
+                        }
+                        releaseNotes = notesBuilder.toString()+"CR : "+crId+" "+"  "+"Defect: "+defectId;
+                    } else {
+                        releaseNotes = "No commits found between tags.";
                     }
-                    releaseNotes = notesBuilder.toString();
                 } catch (JsonProcessingException e) {
                     throw new RuntimeException("Failed to parse compare info: " + e.getMessage());
                 }
@@ -150,7 +166,6 @@ public class GitHubService {
             }
         }
 
-        // Yeni tag oluşturma
         String tagUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/git/refs";
         Map<String, String> tagBody = new HashMap<>();
         tagBody.put("ref", "refs/tags/" + tagName);
@@ -172,7 +187,6 @@ public class GitHubService {
         releaseBody.put("name", tagName);
         releaseBody.put("body", releaseNotes);
 
-
         HttpEntity<Map<String, Object>> releaseEntity = new HttpEntity<>(releaseBody, headers);
         ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
         if (!releaseResponse.getStatusCode().is2xxSuccessful()) {
@@ -180,10 +194,8 @@ public class GitHubService {
         }
 
         // Release bilgilerini döndür
-        ObjectMapper objectMapper = new ObjectMapper();
         JsonNode releaseInfo = objectMapper.readTree(releaseResponse.getBody());
         String releaseLink = releaseInfo.get("html_url").asText();
-        String developerFullName = releaseInfo.get("author").get("login").asText();
 
         ReleaseResponse response = new ReleaseResponse();
         response.setTargetBranch(targetBranch);
@@ -194,9 +206,16 @@ public class GitHubService {
         response.setDeveloperFullName(developerFullName);
         response.setGitHubRepo(gitHubRepo);
         response.setDate(timeStamp);
+        response.setCrId(crId);
+        response.setDefectId(defectId);
+
+
+
+
+
+        releaseResponseRepository.save(response);
 
         return response;
-
     }
 
 }
