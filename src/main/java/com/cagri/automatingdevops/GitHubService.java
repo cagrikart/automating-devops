@@ -4,6 +4,7 @@ package com.cagri.automatingdevops;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.*;
@@ -33,9 +34,12 @@ public class GitHubService {
     private String gitHubRepo;
 
     private final RestTemplate restTemplate;
+    private final ReleaseResponseRepository releaseResponseRepository;
 
-    public GitHubService(RestTemplateBuilder restTemplateBuilder) {
+
+    public GitHubService(RestTemplateBuilder restTemplateBuilder,ReleaseResponseRepository   releaseResponseRepository) {
         this.restTemplate = restTemplateBuilder.build();
+        this.releaseResponseRepository = releaseResponseRepository;
     }
 
     public void mergePullRequest(String githubRepo,int pullNumber) {
@@ -55,7 +59,8 @@ public class GitHubService {
         }
     }
 
-    public ReleaseResponse createTagAndRelease(String targetBranch,String gitHubRepo) throws JsonProcessingException {String tagName;
+    public ReleaseResponse createTagAndRelease(String targetBranch, String gitHubRepo, String customVersion) throws JsonProcessingException {
+        String tagName;
         String branchUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/branches/" + targetBranch;
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + gitHubToken);
@@ -110,10 +115,10 @@ public class GitHubService {
                 }
 
                 if (highestPatchVersion == -1) {
-                    tagName = "1.0.0-c10-" + targetBranch;
+                    tagName = "1.0.0-" + customVersion + "-" + targetBranch;
                 } else {
                     int newPatchVersion = highestPatchVersion + 1;
-                    tagName = "1.0." + newPatchVersion + "-c10-" + targetBranch;
+                    tagName = "1.0." + newPatchVersion + "-" + customVersion + "-" + targetBranch;
                 }
 
             } catch (JsonProcessingException e) {
@@ -126,10 +131,8 @@ public class GitHubService {
         // Farklılıkları bul ve release notları oluştur
         String releaseNotes = "";
         if (latestTagSha == null) {
-            // İlk tag yoksa, compare işlemi atlanır ve başlangıç notu eklenir
             releaseNotes = "Initial release for branch: " + targetBranch;
         } else {
-            // Compare işlemi yalnızca önceki bir tag mevcutsa yapılır
             String compareUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/compare/" + latestTagSha + "..." + commitSha;
             ResponseEntity<String> compareResponse = restTemplate.exchange(compareUrl, HttpMethod.GET, listEntity, String.class);
             if (compareResponse.getStatusCode().is2xxSuccessful()) {
@@ -172,8 +175,6 @@ public class GitHubService {
         releaseBody.put("name", tagName);
         releaseBody.put("body", releaseNotes);
 
-
-
         HttpEntity<Map<String, Object>> releaseEntity = new HttpEntity<>(releaseBody, headers);
         ResponseEntity<String> releaseResponse = restTemplate.exchange(releaseUrl, HttpMethod.POST, releaseEntity, String.class);
         if (!releaseResponse.getStatusCode().is2xxSuccessful()) {
@@ -195,9 +196,9 @@ public class GitHubService {
         response.setDeveloperFullName(developerFullName);
         response.setGitHubRepo(gitHubRepo);
         response.setDate(timeStamp);
+        releaseResponseRepository.save(response);
 
         return response;
-
     }
 
 }

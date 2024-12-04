@@ -33,7 +33,8 @@ public class GitHubController {
         try {
             String targetBranch = body.get("targetBranch");
             String gitHubRepo = body.get("gitHubRepo");
-            ReleaseResponse response = gitHubService.createTagAndRelease(targetBranch,gitHubRepo);
+            String customVersion = body.get("customVersion");
+            ReleaseResponse response = gitHubService.createTagAndRelease(targetBranch,gitHubRepo,customVersion);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
