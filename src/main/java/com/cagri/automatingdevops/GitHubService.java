@@ -21,8 +21,6 @@ import java.util.Map;
 @Service
 public class GitHubService {
 
-    @Value("${github.token}")
-    private String gitHubToken;
 
     @Value("${github.api.url}")
     private String gitHubApiUrl;
@@ -43,7 +41,6 @@ public class GitHubService {
     public void mergePullRequest(String githubRepo,int pullNumber) {
         String url = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + githubRepo + "/pulls/" + pullNumber + "/merge";
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
 
         HttpEntity<String> entity = new HttpEntity<>(headers);
@@ -56,12 +53,12 @@ public class GitHubService {
             System.out.println("Failed to merge PR: " + response.getBody());
         }
     }
-    public List<ReleaseResponse> createTagsAndReleases(String targetBranch, List<String> gitHubRepos, String customVersion, String crId, String defectId) throws Exception {
+    public List<ReleaseResponse> createTagsAndReleases(String targetBranch, List<String> gitHubRepos, String customVersion, String crId, String defectId,String token) throws Exception {
         List<ReleaseResponse> releaseResponses = new ArrayList<>();
 
         for (String gitHubRepo : gitHubRepos) {
             try {
-                ReleaseResponse response = createTagAndRelease(targetBranch, gitHubRepo, customVersion, crId, defectId);
+                ReleaseResponse response = createTagAndRelease(targetBranch, gitHubRepo, customVersion, crId, defectId,token);
                 releaseResponses.add(response);
             } catch (Exception e) {
                 System.err.println("Error processing repo " + gitHubRepo + ": " + e.getMessage());
@@ -70,11 +67,10 @@ public class GitHubService {
 
         return releaseResponses;
     }
-    public ReleaseResponse createTagAndRelease(String targetBranch, String gitHubRepo, String customVersion, String  crId, String defectId) throws JsonProcessingException {
+    public ReleaseResponse createTagAndRelease(String targetBranch, String gitHubRepo, String customVersion, String  crId, String defectId,String gitHubToken) throws JsonProcessingException {
         String tagName;
         HttpHeaders headers = new HttpHeaders();
         String url = "https://api.github.com/user";
-
         headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
 
@@ -87,8 +83,6 @@ public class GitHubService {
         JsonNode jsonNode = objectMapper.readTree(gitLogin.getBody());
         String gitHubOwner = jsonNode.get("login").asText();
         String branchUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/branches/" + targetBranch;
-        headers.set("Authorization", "Bearer " + gitHubToken);
-        headers.set("Accept", "application/vnd.github+json");
 
         HttpEntity<Void> listEntity = new HttpEntity<>(headers);
 
@@ -221,10 +215,6 @@ public class GitHubService {
         response.setDate(timeStamp);
         response.setCrId(crId);
         response.setDefectId(defectId);
-
-
-
-
 
         releaseResponseRepository.save(response);
 

@@ -30,11 +30,12 @@ public class GitHubController {
     }
 
     @PostMapping("/createTagAndRelease")
-    public ResponseEntity<List<ReleaseResponse>> createTagAndRelease(@RequestBody ReleaseRequest releaseRequest) {
+    public ResponseEntity<List<ReleaseResponse>> createTagAndRelease(@RequestHeader("Authorization") String authorizationHeader,@RequestBody ReleaseRequest releaseRequest) {
         try {
+            String gitHubToken = authorizationHeader.replace("Bearer ", "");
             List<ReleaseResponse> response = gitHubService.createTagsAndReleases(releaseRequest.getTargetBranch()
                     , releaseRequest.getGitHubRepo(), releaseRequest.getCustomVersion()
-                    , releaseRequest.getCrId(), releaseRequest.getDefectId());
+                    , releaseRequest.getCrId(), releaseRequest.getDefectId(),gitHubToken);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
