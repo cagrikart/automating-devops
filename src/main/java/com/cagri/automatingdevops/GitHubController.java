@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 
@@ -29,12 +30,12 @@ public class GitHubController {
     }
 
     @PostMapping("/createTagAndRelease")
-    public ResponseEntity<ReleaseResponse> createTagAndRelease(@RequestBody Map<String, String> body) {
+    public ResponseEntity<List<ReleaseResponse>> createTagAndRelease(@RequestHeader("Authorization") String authorizationHeader,@RequestBody ReleaseRequest releaseRequest) {
         try {
-            String targetBranch = body.get("targetBranch");
-            String gitHubRepo = body.get("gitHubRepo");
-            String customVersion = body.get("customVersion");
-            ReleaseResponse response = gitHubService.createTagAndRelease(targetBranch,gitHubRepo,customVersion);
+            String gitHubToken = authorizationHeader.replace("Bearer ", "");
+            List<ReleaseResponse> response = gitHubService.createTagsAndReleases(releaseRequest.getTargetBranch()
+                    , releaseRequest.getGitHubRepo(), releaseRequest.getCustomVersion()
+                    , releaseRequest.getCrId(), releaseRequest.getDefectId(),gitHubToken);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
