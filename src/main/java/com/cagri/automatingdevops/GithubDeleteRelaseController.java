@@ -18,13 +18,18 @@ import java.util.stream.StreamSupport;
 @RequestMapping("/githubDelete")
 public class GithubDeleteRelaseController {
 
-    @Value("${github.token}")
-    private String githubToken;
 
-    private static final String BASE_URL = "https://api.github.com/repos";
 
+  private static final String BASE_URL = "https://api.github.com/repos";
+
+    private HttpHeaders createHeaders(String gitHubToken) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + gitHubToken);
+        headers.set("Accept", "application/vnd.github+json");
+        return headers;
+    }
     @DeleteMapping("/deleteTagsAndReleases")
-    public ResponseEntity<String> deleteTagsAndReleases(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<String> deleteTagsAndReleases(@RequestHeader("Authorization") String authorizationHeader,@RequestBody Map<String, Object> request) {
         String owner = (String) request.get("owner");
         String repo = (String) request.get("repo");
         Integer limit = (Integer) request.get("limit");
@@ -32,10 +37,10 @@ public class GithubDeleteRelaseController {
         if (owner == null || repo == null || limit == null) {
             return ResponseEntity.badRequest().body("Owner, repository, and limit are required.");
         }
-
+        String gitHubToken = authorizationHeader.replace("Bearer ", "");
         RestTemplate restTemplate = new RestTemplate();
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + githubToken);
+        headers.set("Authorization", "Bearer " + gitHubToken);
         headers.set("Accept", "application/vnd.github+json");
 
         try {
