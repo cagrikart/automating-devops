@@ -1,6 +1,6 @@
 package com.cagri.automatingdevops;
 
-
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -11,6 +11,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/github")
+@SecurityRequirement(name = "bearerAuth")
 public class GitHubController {
 
     private final GitHubService gitHubService;
@@ -35,7 +36,7 @@ public class GitHubController {
         try {
             String gitHubToken = authorizationHeader.replace("Bearer ", "");
             List<ReleaseResponse> response = gitHubService.createTagsAndReleases(releaseRequest.getTargetBranch()
-                    , releaseRequest.getGitHubRepo(), releaseRequest.getCustomVersion()
+                    , releaseRequest.getGitHubRepo()
                     , releaseRequest.getCrId(), releaseRequest.getDefectId(),gitHubToken);
             return ResponseEntity.ok(response);
         } catch (Exception e) {

@@ -58,12 +58,12 @@ public class GitHubService {
             System.out.println("Failed to merge PR: " + response.getBody());
         }
     }
-    public List<ReleaseResponse> createTagsAndReleases(String targetBranch, List<String> gitHubRepos, String customVersion, String crId, String defectId,String token) throws Exception {
+    public List<ReleaseResponse> createTagsAndReleases(String targetBranch, List<String> gitHubRepos,String crId, String defectId,String token) throws Exception {
         List<ReleaseResponse> releaseResponses = new ArrayList<>();
 
         for (String gitHubRepo : gitHubRepos) {
             try {
-                ReleaseResponse response = createTagAndRelease(targetBranch, gitHubRepo, customVersion, crId, defectId,token);
+                ReleaseResponse response = createTagAndRelease(targetBranch, gitHubRepo, crId, defectId,token);
                 releaseResponses.add(response);
             } catch (Exception e) {
                 System.err.println("Error processing repo " + gitHubRepo + ": " + e.getMessage());
@@ -72,7 +72,7 @@ public class GitHubService {
 
         return releaseResponses;
     }
-    public ReleaseResponse createTagAndRelease(String targetBranch, String gitHubRepo, String customVersion, String crId, String defectId, String gitHubToken) throws JsonProcessingException {
+    public ReleaseResponse createTagAndRelease(String targetBranch, String gitHubRepo,String crId, String defectId, String gitHubToken) throws JsonProcessingException {
         HttpHeaders headers = createHeaders(gitHubToken);
         RestTemplate restTemplate = new RestTemplate();
         ObjectMapper objectMapper = new ObjectMapper();
@@ -81,7 +81,7 @@ public class GitHubService {
 
         String commitSha = fetchBranchCommitSha(headers, restTemplate, objectMapper, gitHubOwner, gitHubRepo, targetBranch);
 
-        String tagName = generateNewTagName(headers, restTemplate, objectMapper, gitHubOwner, gitHubRepo, targetBranch, customVersion);
+        String tagName = generateNewTagName(headers, restTemplate, objectMapper, gitHubOwner, gitHubRepo, targetBranch);
         String latestTagSha = fetchLatestTagSha(headers, restTemplate, objectMapper, gitHubOwner, gitHubRepo, targetBranch);
 
         String releaseNotes = generateReleaseNotes(headers, restTemplate, objectMapper, gitHubOwner, gitHubRepo, latestTagSha, commitSha, tagName, crId, defectId,targetBranch);
@@ -116,7 +116,7 @@ public class GitHubService {
         throw new RuntimeException("Failed to retrieve branch info: " + response.getBody());
     }
 
-    private String generateNewTagName(HttpHeaders headers, RestTemplate restTemplate, ObjectMapper objectMapper, String gitHubOwner, String gitHubRepo, String targetBranch, String customVersion) {
+    private String generateNewTagName(HttpHeaders headers, RestTemplate restTemplate, ObjectMapper objectMapper, String gitHubOwner, String gitHubRepo, String targetBranch) {
         String tagListUrl = gitHubApiUrl + "/repos/" + gitHubOwner + "/" + gitHubRepo + "/tags";
         ResponseEntity<String> response = restTemplate.exchange(tagListUrl, HttpMethod.GET, new HttpEntity<>(headers), String.class);
 
@@ -131,7 +131,7 @@ public class GitHubService {
                     }
                 }
                 int newPatchVersion = highestPatchVersion + 1;
-                return "1.0." + newPatchVersion + "-" + customVersion + "-" + targetBranch;
+                return "1.0." + newPatchVersion +  "-" + targetBranch;
             } catch (JsonProcessingException e) {
                 throw new RuntimeException("Failed to parse tag list response: " + e.getMessage());
             }
